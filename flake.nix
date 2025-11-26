@@ -16,6 +16,13 @@
           cacert = prev.cacert;
           bash = prev.bash;
         };
+        gemini-cli-preview = final.callPackage ./package-preview.nix {
+          stdenv = prev.stdenv;
+          fetchurl = prev.fetchurl;
+          nodejs_22 = prev.nodejs_22;
+          cacert = prev.cacert;
+          bash = prev.bash;
+        };
       };
     in
     flake-utils.lib.eachDefaultSystem (system:
@@ -30,6 +37,7 @@
         packages = {
           default = pkgs.gemini-cli;
           gemini-cli = pkgs.gemini-cli;
+          gemini-cli-preview = pkgs.gemini-cli-preview;
         };
 
         apps = {
@@ -40,6 +48,10 @@
           gemini-cli = {
             type = "app";
             program = "${pkgs.gemini-cli}/bin/gemini";
+          };
+          gemini-cli-preview = {
+            type = "app";
+            program = "${pkgs.gemini-cli-preview}/bin/gemini-preview";
           };
         };
 
