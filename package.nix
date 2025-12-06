@@ -7,7 +7,7 @@
 }: 
 
 let
-  version = "0.17.1"; # Update this to install a newer version
+  version = "0.19.4";
 
   # Pre-fetch the npm package as a Fixed Output Derivation
   # This allows network access during fetch phase for sandbox compatibility
@@ -15,7 +15,7 @@ let
     url = "https://registry.npmjs.org/@google/gemini-cli/-/gemini-cli-${version}.tgz";
     # To get new hash when updating version:
     # nix-prefetch-url https://registry.npmjs.org/@google/gemini-cli/-/gemini-cli-VERSION.tgz
-    sha256 = "6e506cba746f3f24ef9ed0d8847e07003f34852de759af1923191e0d2bc2d95b";
+    sha256 = "1ddl2ys1rc9xwxfqaw5mwg5ly346wmh3i6bjzp936wfdvrvaprra";
   };
 in
 stdenv.mkDerivation rec {

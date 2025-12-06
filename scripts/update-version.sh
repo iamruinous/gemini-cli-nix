@@ -18,7 +18,7 @@ URL="https://registry.npmjs.org/@google/gemini-cli/-/gemini-cli-${LATEST_VERSION
 SHA256=$(nix-prefetch-url $URL)
 
 # Update package.nix
-perl -pi -e "s/version = ".*"/version = "$LATEST_VERSION"/" package.nix
-perl -pi -e "s/sha256 = ".*"/sha256 = "$SHA256"/" package.nix
+perl -pi -e "s/version = \".*\"/version = \"$LATEST_VERSION\"/" package.nix
+perl -pi -e "s/sha256 = \".*\"/sha256 = \"$SHA256\"/" package.nix
 
 echo "Updated package.nix to version $LATEST_VERSION"

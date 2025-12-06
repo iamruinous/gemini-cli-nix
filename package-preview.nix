@@ -7,12 +7,12 @@
 }: 
 
 let
-  version = "0.19.0-preview.0"; # Update this to install a newer version
+  version = "0.20.0-preview.1";
 
   # Pre-fetch the npm package as a Fixed Output Derivation
   geminiCliTarball = fetchurl {
     url = "https://registry.npmjs.org/@google/gemini-cli/-/gemini-cli-${version}.tgz";
-    sha256 = "ad75fc297572c0654f93992e279510b24ddba48e25ed8bcc3e6d5657b0da1ca1";
+    sha256 = "1lipzbpf4563wp2hnj00i67c4cvqnhmlc48g0jbcs9yz7yhqj613";
   };
 in
 stdenv.mkDerivation rec {
