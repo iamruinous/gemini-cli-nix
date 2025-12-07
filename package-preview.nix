@@ -1,35 +1,52 @@
 {
   lib,
+  stdenv,
   buildNpmPackage,
   fetchFromGitHub,
+  jq,
   pkg-config,
+  clang_20,
   libsecret,
 }:
-buildNpmPackage rec {
+buildNpmPackage (finalAttrs: {
   pname = "gemini-cli-preview";
   version = "0.20.0-preview.1";
 
   src = fetchFromGitHub {
     owner = "google-gemini";
     repo = "gemini-cli";
-    rev = "v${version}";
-    hash = "sha256-KvjPT+ocuXgfvs3mIBbP9Vd+BcNHqy0gLEimLngh0CE=";
+    rev = "v${finalAttrs.version}";
+    hash = "sha256-kAb5CSD7PB3b63QnVSbgWxIMPO2Hh5LfmtZ3wE2TUFk=";
   };
 
-  npmDepsHash = "sha256-Tb0DgFSHv6m0K0ARIbvEjTRB/6ytsbmFPDpv0lAve58=";
+  npmDepsHash = "sha256-tCu98oLr/xh4MJR6q+AbySHOmFeZFH7z59rL0K5A9Es=";
 
-  nativeBuildInputs = [
-    pkg-config
-  ];
+  nativeBuildInputs =
+    [
+      jq
+      pkg-config
+    ]
+    ++ lib.optionals stdenv.isDarwin [clang_20]; # clang_21 breaks @vscode/vsce's optionalDependencies keytar
 
   buildInputs = [
     libsecret
   ];
 
+  preConfigure = ''
+    mkdir -p packages/generated
+    echo "export const GIT_COMMIT_INFO = { commitHash: '${finalAttrs.src.rev}' };" > packages/generated/git-commit.ts
+  '';
+
   postPatch = ''
     # Disable auto-update
     substituteInPlace packages/cli/src/utils/handleAutoUpdate.ts \
       --replace-fail "settings.merged.general?.disableAutoUpdate ?? false" "settings.merged.general?.disableAutoUpdate ?? true"
+
+    # Remove node-pty dependency from package.json
+    ${jq}/bin/jq 'del(.optionalDependencies."node-pty")' package.json > package.json.tmp && mv package.json.tmp package.json
+
+    # Remove node-pty dependency from packages/core/package.json
+    ${jq}/bin/jq 'del(.optionalDependencies."node-pty")' packages/core/package.json > packages/core/package.json.tmp && mv packages/core/package.json.tmp packages/core/package.json
   '';
 
   installPhase = ''
@@ -61,4 +78,4 @@ buildNpmPackage rec {
     platforms = platforms.all;
     mainProgram = "gemini-preview";
   };
-}
+})
