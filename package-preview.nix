@@ -1,69 +1,57 @@
-{ lib
-, stdenv
-, fetchurl
-, nodejs_22
-, cacert
-, bash
-}: 
-
-let
+{
+  lib,
+  buildNpmPackage,
+  fetchFromGitHub,
+  pkg-config,
+  libsecret,
+}:
+buildNpmPackage rec {
+  pname = "gemini-cli-preview";
   version = "0.20.0-preview.1";
 
-  # Pre-fetch the npm package as a Fixed Output Derivation
-  geminiCliTarball = fetchurl {
-    url = "https://registry.npmjs.org/@google/gemini-cli/-/gemini-cli-${version}.tgz";
-    sha256 = "1lipzbpf4563wp2hnj00i67c4cvqnhmlc48g0jbcs9yz7yhqj613";
+  src = fetchFromGitHub {
+    owner = "google-gemini";
+    repo = "gemini-cli";
+    rev = "v${version}";
+    hash = "sha256-KvjPT+ocuXgfvs3mIBbP9Vd+BcNHqy0gLEimLngh0CE=";
   };
-in
-stdenv.mkDerivation rec {
-  pname = "gemini-cli-preview";
-  inherit version;
 
-  dontUnpack = true;
+  npmDepsHash = "sha256-Tb0DgFSHv6m0K0ARIbvEjTRB/6ytsbmFPDpv0lAve58=";
 
   nativeBuildInputs = [
-    nodejs_22
-    cacert
+    pkg-config
   ];
 
-  buildPhase = ''
-    export HOME=$TMPDIR
-    mkdir -p $HOME/.npm
-    export SSL_CERT_FILE=${cacert}/etc/ssl/certs/ca-bundle.crt
-    export NODE_EXTRA_CA_CERTS=$SSL_CERT_FILE
-    ${nodejs_22}/bin/npm config set cafile $SSL_CERT_FILE
+  buildInputs = [
+    libsecret
+  ];
 
-    # Install gemini-cli
-    ${nodejs_22}/bin/npm install -g --prefix=$out ${geminiCliTarball}
+  postPatch = ''
+    # Disable auto-update
+    substituteInPlace packages/cli/src/utils/handleAutoUpdate.ts \
+      --replace-fail "settings.merged.general?.disableAutoUpdate ?? false" "settings.merged.general?.disableAutoUpdate ?? true"
   '';
 
   installPhase = ''
-    # Remove the npm-generated link (it's named gemini by default)
-    rm -f $out/bin/gemini
+    runHook preInstall
+    mkdir -p $out/{bin,share/gemini-cli}
 
-    mkdir -p $out/bin
-    cat > $out/bin/gemini-preview << 'EOF'
-    #!${bash}/bin/bash
-    export NODE_PATH="$out/lib/node_modules"
-    export DISABLE_AUTOUPDATER=1
-    export _GEMINI_NPM_WRAPPER="$(mktemp -d)/npm"
-    cat > "$_GEMINI_NPM_WRAPPER" << 'NPM_EOF'
-    #!${bash}/bin/bash
-    if [[ "$1" = "update" ]] || [[ "$1" = "outdated" ]] || [[ "$1" = "view" && "$2" =~ @google/gemini-cli ]]; then
-        echo "Updates are managed through Nix. Current version: ${version}"
-        exit 0
-    fi
-    exec ${nodejs_22}/bin/npm "$@"
-    NPM_EOF
-    chmod +x "$_GEMINI_NPM_WRAPPER"
-    export PATH="$(dirname "$_GEMINI_NPM_WRAPPER"):$PATH"
+    npm prune --omit=dev
+    cp -r node_modules $out/share/gemini-cli/
 
-    exec ${nodejs_22}/bin/node --no-warnings --enable-source-maps "$out/lib/node_modules/@google/gemini-cli/dist/index.js" "$@"
-    EOF
-    chmod +x $out/bin/gemini-preview
+    rm -f $out/share/gemini-cli/node_modules/@google/gemini-cli
+    rm -f $out/share/gemini-cli/node_modules/@google/gemini-cli-core
+    rm -f $out/share/gemini-cli/node_modules/@google/gemini-cli-a2a-server
+    rm -f $out/share/gemini-cli/node_modules/@google/gemini-cli-test-utils
+    rm -f $out/share/gemini-cli/node_modules/gemini-cli-vscode-ide-companion
+    cp -r packages/cli $out/share/gemini-cli/node_modules/@google/gemini-cli
+    cp -r packages/core $out/share/gemini-cli/node_modules/@google/gemini-cli-core
+    cp -r packages/a2a-server $out/share/gemini-cli/node_modules/@google/gemini-cli-a2a-server
 
-    substituteInPlace $out/bin/gemini-preview \
-      --replace '$out' "$out"
+    ln -s $out/share/gemini-cli/node_modules/@google/gemini-cli/dist/index.js $out/bin/gemini-preview
+    chmod +x "$out/bin/gemini-preview"
+
+    runHook postInstall
   '';
 
   meta = with lib; {
@@ -71,5 +59,6 @@ stdenv.mkDerivation rec {
     homepage = "https://github.com/google-gemini/gemini-cli";
     license = licenses.asl20;
     platforms = platforms.all;
+    mainProgram = "gemini-preview";
   };
 }

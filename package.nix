@@ -1,107 +1,64 @@
-{ lib
-, stdenv
-, fetchurl
-, nodejs_22
-, cacert
-, bash
-}: 
-
-let
+{
+  lib,
+  buildNpmPackage,
+  fetchFromGitHub,
+  pkg-config,
+  libsecret,
+}:
+buildNpmPackage rec {
+  pname = "gemini-cli";
   version = "0.19.4";
 
-  # Pre-fetch the npm package as a Fixed Output Derivation
-  # This allows network access during fetch phase for sandbox compatibility
-  geminiCliTarball = fetchurl {
-    url = "https://registry.npmjs.org/@google/gemini-cli/-/gemini-cli-${version}.tgz";
-    # To get new hash when updating version:
-    # nix-prefetch-url https://registry.npmjs.org/@google/gemini-cli/-/gemini-cli-VERSION.tgz
-    sha256 = "1ddl2ys1rc9xwxfqaw5mwg5ly346wmh3i6bjzp936wfdvrvaprra";
+  src = fetchFromGitHub {
+    owner = "google-gemini";
+    repo = "gemini-cli";
+    rev = "v${version}";
+    hash = "sha256-kAb5CSD7PB3b63QnVSbgWxIMPO2Hh5LfmtZ3wE2TUFk=";
   };
-in
-stdenv.mkDerivation rec {
-  pname = "gemini-cli";
-  inherit version;
 
-  # Don't try to unpack a source tarball - we'll handle it in buildPhase
-  dontUnpack = true;
+  npmDepsHash = "sha256-tCu98oLr/xh4MJR6q+AbySHOmFeZFH7z59rL0K5A9Es=";
 
-  # Build dependencies
   nativeBuildInputs = [
-    nodejs_22   # Use Node.js v22 LTS for compatibility
-    cacert      # SSL certificates for npm
+    pkg-config
   ];
 
-  buildPhase = ''
-    # Create a temporary HOME for npm to use during build
-    export HOME=$TMPDIR
-    mkdir -p $HOME/.npm
+  buildInputs = [
+    libsecret
+  ];
 
-    # Configure npm to use Nix's SSL certificates
-    export SSL_CERT_FILE=${cacert}/etc/ssl/certs/ca-bundle.crt
-    export NODE_EXTRA_CA_CERTS=$SSL_CERT_FILE
-
-    # Tell npm where to find certificates
-    ${nodejs_22}/bin/npm config set cafile $SSL_CERT_FILE
-
-    # Configure npm to work offline
-
-
-    # Install gemini-cli from the pre-fetched tarball
-    # This avoids network access during build phase
-    ${nodejs_22}/bin/npm install -g --prefix=$out ${geminiCliTarball}
+  postPatch = ''
+    # Disable auto-update
+    substituteInPlace packages/cli/src/utils/handleAutoUpdate.ts \
+      --replace-fail "settings.merged.general?.disableAutoUpdate ?? false" "settings.merged.general?.disableAutoUpdate ?? true"
   '';
 
   installPhase = ''
-    # The npm-generated binary has issues with env and paths
-    # Remove it so we can create our own wrapper
-    rm -f $out/bin/gemini
+    runHook preInstall
+    mkdir -p $out/{bin,share/gemini-cli}
 
-    # Create a wrapper script that:
-    # 1. Uses NODE_PATH to find modules without changing directory
-    # 2. Runs gemini from the user's current directory
-    # 3. Passes all arguments through
-    # 4. Preserves the consistent path for settings
-    mkdir -p $out/bin
-    cat > $out/bin/gemini << 'EOF'
-    #!${bash}/bin/bash
-    # Set NODE_PATH to find the gemini-cli modules
-    export NODE_PATH="$out/lib/node_modules"
+    npm prune --omit=dev
+    cp -r node_modules $out/share/gemini-cli/
 
-    # Disable automatic update checks since updates should go through Nix
-    export DISABLE_AUTOUPDATER=1
+    rm -f $out/share/gemini-cli/node_modules/@google/gemini-cli
+    rm -f $out/share/gemini-cli/node_modules/@google/gemini-cli-core
+    rm -f $out/share/gemini-cli/node_modules/@google/gemini-cli-a2a-server
+    rm -f $out/share/gemini-cli/node_modules/@google/gemini-cli-test-utils
+    rm -f $out/share/gemini-cli/node_modules/gemini-cli-vscode-ide-companion
+    cp -r packages/cli $out/share/gemini-cli/node_modules/@google/gemini-cli
+    cp -r packages/core $out/share/gemini-cli/node_modules/@google/gemini-cli-core
+    cp -r packages/a2a-server $out/share/gemini-cli/node_modules/@google/gemini-cli-a2a-server
 
-    # Create a temporary npm wrapper that Gemini CLI will use internally
-    # This ensures it doesn't interfere with project npm versions
-    export _GEMINI_NPM_WRAPPER="$(mktemp -d)/npm"
-    cat > "$_GEMINI_NPM_WRAPPER" << 'NPM_EOF'
-    #!${bash}/bin/bash
-    # Intercept npm commands that might trigger update checks
-    if [[ "$1" = "update" ]] || [[ "$1" = "outdated" ]] || [[ "$1" = "view" && "$2" =~ @google/gemini-cli ]]; then
-        echo "Updates are managed through Nix. Current version: ${version}"
-        exit 0
-    fi
-    # Pass through to bundled npm for other commands
-    exec ${nodejs_22}/bin/npm "$@"
-    NPM_EOF
-    chmod +x "$_GEMINI_NPM_WRAPPER"
+    ln -s $out/share/gemini-cli/node_modules/@google/gemini-cli/dist/index.js $out/bin/gemini
+    chmod +x "$out/bin/gemini"
 
-    # Only add our npm wrapper to PATH for Gemini CLI's internal use
-    export PATH="$(dirname "$_GEMINI_NPM_WRAPPER"):$PATH"
-
-    # Run gemini from current directory
-    exec ${nodejs_22}/bin/node --no-warnings --enable-source-maps "$out/lib/node_modules/@google/gemini-cli/dist/index.js" "$@"
-    EOF
-    chmod +x $out/bin/gemini
-
-    # Replace $out placeholder with the actual output path
-    substituteInPlace $out/bin/gemini \
-      --replace '$out' "$out"
+    runHook postInstall
   '';
 
   meta = with lib; {
     description = "Gemini CLI - AI assistant in your terminal";
     homepage = "https://github.com/google-gemini/gemini-cli";
-    license = licenses.asl20; # Gemini CLI is Apache-2.0 licensed
+    license = licenses.asl20;
     platforms = platforms.all;
+    mainProgram = "gemini";
   };
 }
