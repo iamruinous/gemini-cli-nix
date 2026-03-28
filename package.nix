@@ -10,7 +10,7 @@
 }:
 buildNpmPackage (finalAttrs: {
   pname = "gemini-cli";
-  version = "0.35.2";
+  version = "0.35.3";
 
   src = fetchFromGitHub {
     owner = "google-gemini";
